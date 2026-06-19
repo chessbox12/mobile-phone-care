@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mobile Phone Care — premium one-page site
 
-## Getting Started
+A cinematic, single-page scrolling website for **Mobile Phone Care**, a Sydney
+phone & device repair specialist (Martin Place CBD + DFO Homebush).
 
-First, run the development server:
+Built as a fast, dependency-light **static site** — no build step.
+
+## Stack
+
+- Plain `index.html` + `styles.css` + `script.js`
+- [GSAP](https://gsap.com/) + ScrollTrigger and [Lenis](https://lenis.darkroom.engineering/)
+  smooth-scroll — **vendored locally** in `assets/vendor/` (works offline, no CDN)
+- Hand-built SVG visuals (hero phone, circuit board, icons) in the markup
+- Dark cinematic-luxury theme, glassmorphism, scroll-triggered animation
+- Mobile-first, responsive, AA-contrast, honours `prefers-reduced-motion`
+
+## Run locally
+
+Any static server works, e.g.:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+python3 -m http.server 4500
+# then open http://localhost:4500
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+index.html          # all markup + inline SVG + JSON-LD
+styles.css          # design tokens + components + sections
+script.js           # Lenis + GSAP ScrollTrigger choreography
+assets/vendor/      # gsap, ScrollTrigger, lenis (pinned versions)
+assets/img/         # images (og image, etc.)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deploy
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Drag the folder onto Netlify, or `vercel`/`netlify deploy`, or any static host
+(GitHub Pages, Cloudflare Pages, S3). Nothing to build.
