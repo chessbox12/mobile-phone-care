@@ -85,10 +85,10 @@ function genShardPolys(W, H, ix, iy, seed) {
   let maxR = 0;
   for (const c of [[-W/2,-H/2],[W/2,-H/2],[W/2,H/2],[-W/2,H/2]]) maxR = Math.max(maxR, Math.hypot(c[0] - ix, c[1] - iy));
   maxR *= 1.05;
-  const N = 11, angs = [];
+  const N = 8, angs = [];
   for (let i = 0; i < N; i++) angs.push(i / N * Math.PI * 2 + rnd(-0.12, 0.12));
   angs.sort((a, b) => a - b); angs.push(angs[0] + Math.PI * 2);
-  const rings = [0, 0.14, 0.32, 0.58, 1.0].map(f => f * maxR);
+  const rings = [0, 0.20, 0.46, 1.0].map(f => f * maxR);
   const polar = (a, r) => [ix + Math.cos(a) * r, iy + Math.sin(a) * r];
   const out = [];
   for (let k = 0; k < rings.length - 1; k++)
@@ -101,6 +101,29 @@ function genShardPolys(W, H, ix, iy, seed) {
       if (c.length >= 3) out.push(c);
     }
   return out;
+}
+
+// Reduce each crack cell to a Voronoi SITE (centroid) + ring band. Nearest-site
+// assignment -> every triangle lands in exactly one cell (never split -> winding stays valid).
+function buildFractureCells(W, H, ix, iy, seed) {
+  const polys = genShardPolys(W, H, ix, iy, seed);
+  const maxd = Math.hypot(W, H) / 2;
+  const cells = [];
+  for (const poly of polys) {
+    let cx = 0, cy = 0;
+    for (const p of poly) { cx += p[0]; cy += p[1]; }
+    cx /= poly.length; cy /= poly.length;
+    cells.push({ cx, cy, ring: Math.min(Math.hypot(cx - ix, cy - iy) / maxd, 1) });
+  }
+  return { cells, ix, iy, maxd };
+}
+function nearestCell(cells, x, y) {
+  let bi = 0, bd = Infinity;
+  for (let i = 0; i < cells.length; i++) {
+    const dx = cells[i].cx - x, dy = cells[i].cy - y, d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; bi = i; }
+  }
+  return bi;
 }
 
 // the GLB's real display mesh: hardcoded name first (asset is fixed), then a
@@ -289,118 +312,139 @@ function init3D() {
       return { group, fillMat, edgeMat, shards };
     }
 
-    // Fragment the GLB's OWN screen mesh ("xXDHkMplTIDAXLN") — real geometry,
-    // real material (emissiveMap wallpaper). Confirmed: centered flat plane at
-    // local z = -0.616, W = 7.128 (X), H = 15.403 (Y); UV u = 0.5 - x/W, v = 0.5 + y/H.
-    function buildScreenShards(screenMesh, seed) {
-      const SCR_W = 7.128, SCR_H = 15.403, SCR_Z = -0.616;
-
-      screenMesh.updateWorldMatrix(true, false);
-      const q = screenMesh.quaternion;
-      const qIdentity = Math.abs(q.x) < 1e-4 && Math.abs(q.y) < 1e-4 &&
-                        Math.abs(q.z) < 1e-4 && Math.abs(1 - Math.abs(q.w)) < 1e-4;
-      if (!qIdentity) console.warn("[screen-shards] screen node quaternion != identity; copied verbatim", q);
-
-      // Resolve the outward lift direction at runtime (base.ry=PI flips facing),
-      // so pieces always lift TOWARD the camera.
-      const camPos = camera.getWorldPosition(new THREE.Vector3());
-      const meshWorldPos = screenMesh.getWorldPosition(new THREE.Vector3());
-      const worldQuat = screenMesh.getWorldQuaternion(new THREE.Quaternion());
-      const localPlusZ = new THREE.Vector3(0, 0, 1).applyQuaternion(worldQuat).normalize();
-      const toCam = camPos.clone().sub(meshWorldPos).normalize();
-      const LIFT_SIGN = localPlusZ.dot(toCam) >= 0 ? 1 : -1;
-
-      // Sibling of the screen mesh: same parent + same local TRS, so geometry-local
-      // coords map 1:1 and the shards inherit modelWrap (base.ry=PI, 0.01 scale) +
-      // the phone scroll rotation for free.
-      const group = new THREE.Group();
-      group.name = "screenShards";
-      group.position.copy(screenMesh.position);
-      group.quaternion.copy(screenMesh.quaternion);
-      group.scale.copy(screenMesh.scale);
-      group.renderOrder = 6;
-      (screenMesh.parent || modelWrap).add(group);
-
-      // Clone the real material (shares the same textures -> byte-identical display) and
-      // set DoubleSide: ShapeGeometry faces +Z but the GLB screen front faces the other
-      // way under a FrontSide material, so un-cloned shards would back-face cull (render
-      // black). DoubleSide also lets tilted shards glow from both sides while shattered.
-      const srcMat = Array.isArray(screenMesh.material) ? screenMesh.material[0] : screenMesh.material;
-      if (srcMat.transparent) console.warn("[screen-shards] screen material is transparent; seams may show");
-      const mat = srcMat.clone();
-      mat.side = THREE.DoubleSide;
-
-      const edgeMat = new THREE.LineBasicMaterial({
-        color: 0xcfe0ff, transparent: true, opacity: 0,
-        depthWrite: false, blending: THREE.AdditiveBlending,
-      });
+    // Fragment the WHOLE rendered phone's own geometry/materials into ~20 reassembling
+    // 3D cells: walk every triangle of all 31 meshes, bake into phone-local space, assign
+    // each to the nearest fracture cell, rebuild per (cell, material) with the ORIGINAL
+    // material. The union == the intact phone, so reassembly is pixel-seamless.
+    function buildWholePhoneShatter(seed) {
+      const PW = 1.46, PH = 3.0;                       // confirmed phone-local face W/H (slab)
+      phone.updateWorldMatrix(true, false);
+      modelWrap.updateWorldMatrix(true, true);
+      const phoneInv = new THREE.Matrix4().copy(phone.matrixWorld).invert();
 
       const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
-      const ix = rnd(-0.06, 0.06) * SCR_W, iy = rnd(-0.04, 0.18) * SCR_H;
-      const polys = genShardPolys(SCR_W, SCR_H, ix, iy, seed);
-      const maxd = Math.hypot(SCR_W, SCR_H) / 2;
+      const ix = rnd(-0.10, 0.10) * PW, iy = rnd(0.02, 0.22) * PH;   // off-center upper-mid impact
+      const F = buildFractureCells(PW, PH, ix, iy, seed);
+      const cells = F.cells, NC = cells.length;
+      const buckets = cells.map(() => new Map());      // ci -> Map<material, {pos,nor,uv,uv2}>
 
-      const shards = [];
-      for (const poly of polys) {
-        const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
-        const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+      const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3();
+      const nA = new THREE.Vector3(), nB = new THREE.Vector3(), nC = new THREE.Vector3();
+      const nrm = new THREE.Matrix3();
+      const meshes = [];
+      modelWrap.traverse((o) => { if (o.isMesh && o.geometry) meshes.push(o); });
 
-        const shape = new THREE.Shape();
-        poly.forEach((p, i) => i
-          ? shape.lineTo(p[0] - cx, p[1] - cy)
-          : shape.moveTo(p[0] - cx, p[1] - cy));
-        const geo = new THREE.ShapeGeometry(shape);
+      for (const mesh of meshes) {
+        mesh.updateWorldMatrix(true, false);
+        const toLocal = new THREE.Matrix4().multiplyMatrices(phoneInv, mesh.matrixWorld);
+        nrm.getNormalMatrix(toLocal);
+        const flip = toLocal.determinant() < 0;        // base.ry=PI mirror -> reverse winding so FrontSide stays lit
+        const g = mesh.geometry;
+        const pos = g.attributes.position;
+        const idx = g.index;
+        if (Array.isArray(mesh.material) && mesh.material.length > 1)
+          console.warn("[shatter] multi-material mesh; only material[0] used:", mesh.name);
+        const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
 
-        // confirmed UV map in ABSOLUTE screen-local coords -> provably seamless.
-        const pos = geo.attributes.position, uv = new Float32Array(pos.count * 2);
-        for (let i = 0; i < pos.count; i++) {
-          const X = pos.getX(i) + cx, Y = pos.getY(i) + cy;
-          uv[i * 2]     = 0.5 - X / SCR_W;
-          uv[i * 2 + 1] = 0.5 + Y / SCR_H;
+        // Copy EVERY source attribute by its real name (uv / uv1 / uv2 / uv3 / color / ...)
+        // so whatever UV channel each map samples exists; position + normal get transformed.
+        const attrs = [];
+        for (const name in g.attributes) attrs.push({ name, a: g.attributes[name], size: g.attributes[name].itemSize });
+
+        const triCount = idx ? idx.count / 3 : pos.count / 3;
+        for (let t = 0; t < triCount; t++) {
+          let iA = idx ? idx.getX(t * 3)     : t * 3;
+          let iB = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
+          let iC = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+          if (flip) { const tmp = iB; iB = iC; iC = tmp; } // keep winding consistent w/ flipped normals
+          const tri = [iA, iB, iC];
+
+          vA.fromBufferAttribute(pos, iA).applyMatrix4(toLocal);
+          vB.fromBufferAttribute(pos, iB).applyMatrix4(toLocal);
+          vC.fromBufferAttribute(pos, iC).applyMatrix4(toLocal);
+          const ci = nearestCell(cells, (vA.x + vB.x + vC.x) / 3, (vA.y + vB.y + vC.y) / 3);
+
+          let bk = buckets[ci].get(material);
+          if (!bk) { bk = {}; for (const e of attrs) bk[e.name] = { data: [], size: e.size }; buckets[ci].set(material, bk); }
+          for (const e of attrs) {
+            const slot = bk[e.name] || (bk[e.name] = { data: [], size: e.size });
+            const out = slot.data;
+            if (e.name === "position") {
+              out.push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z);
+            } else if (e.name === "normal") {
+              nA.fromBufferAttribute(e.a, iA).applyMatrix3(nrm).normalize();
+              nB.fromBufferAttribute(e.a, iB).applyMatrix3(nrm).normalize();
+              nC.fromBufferAttribute(e.a, iC).applyMatrix3(nrm).normalize();
+              out.push(nA.x, nA.y, nA.z, nB.x, nB.y, nB.z, nC.x, nC.y, nC.z);
+            } else {
+              const a = e.a, s = e.size;
+              for (let j = 0; j < 3; j++) for (let k = 0; k < s; k++) out.push(a.getComponent(tri[j], k));
+            }
+          }
         }
-        geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-        geo.setAttribute("uv2", new THREE.Float32BufferAttribute(uv.slice(), 2)); // aoMap uses uv2
-
-        const holder = new THREE.Group();
-        const sMesh = new THREE.Mesh(geo, mat);
-        sMesh.renderOrder = 6;
-        sMesh.frustumCulled = false;
-        const sLine = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-        sLine.renderOrder = 7;
-        holder.add(sMesh, sLine);
-
-        const dir = new THREE.Vector2(cx - ix, cy - iy);
-        const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
-        const t = Math.min(dist / maxd, 1);
-
-        const home = new THREE.Vector3(cx, cy, SCR_Z);
-        const spread = 0.12 + t * 0.55;
-        const lift = LIFT_SIGN * (0.18 + rng() * 0.45 + t * 0.35);
-        const broken = new THREE.Vector3(cx + dir.x * spread, cy + dir.y * spread, SCR_Z + lift);
-        const brot = new THREE.Euler(rnd(-0.14, 0.14), rnd(-0.14, 0.14), rnd(-0.16, 0.16));
-
-        holder.position.copy(broken);
-        holder.rotation.copy(brot);
-        group.add(holder);
-
-        shards.push({ holder, home, broken, brot, delay: (1 - t) * 0.4, dur: 0.45 + rng() * 0.12 });
       }
 
-      screenMesh.visible = false; // shard union replaces it 1:1 (no double-draw)
-      return { group, fillMat: null, edgeMat, shards };
+      // Lift TOWARD camera regardless of base.ry=PI: test camera in phone-local space.
+      const camLocal = camera.getWorldPosition(new THREE.Vector3()); phone.worldToLocal(camLocal);
+      const LIFT_SIGN = camLocal.z >= 0 ? 1 : -1;
+
+      const group = new THREE.Group(); group.name = "phoneShatter"; group.renderOrder = 6;
+      phone.add(group);                                // inherits scroll rotation
+      const shards = [];
+
+      for (let ci = 0; ci < NC; ci++) {
+        const mats = buckets[ci];
+        if (mats.size === 0) continue;                 // empty Voronoi site -> no draw call
+        const holder = new THREE.Group(); holder.frustumCulled = false;
+        for (const [material, bk] of mats) {
+          const posBk = bk["position"];
+          if (!posBk || posBk.data.length < 9) continue; // degenerate bucket
+          const geo = new THREE.BufferGeometry();
+          for (const name in bk) {
+            if (name === "tangent") continue;            // unreliable under the transform; three derives it
+            geo.setAttribute(name, new THREE.Float32BufferAttribute(bk[name].data, bk[name].size));
+          }
+          // Guarantee every UV channel a shared material might sample exists (alias to uv),
+          // so a fragment never references an undeclared uv attribute in the compiled shader.
+          let uvAttr = geo.getAttribute("uv");
+          if (!uvAttr) { uvAttr = new THREE.Float32BufferAttribute(new Float32Array((posBk.data.length / 3) * 2), 2); geo.setAttribute("uv", uvAttr); }
+          for (const nm of ["uv1", "uv2", "uv3"]) if (!geo.getAttribute(nm)) geo.setAttribute(nm, uvAttr);
+          const piece = new THREE.Mesh(geo, material);  // ORIGINAL material (shared program/textures)
+          piece.frustumCulled = false; piece.renderOrder = 6;
+          holder.add(piece);
+        }
+        if (holder.children.length === 0) continue;
+        group.add(holder);
+
+        // BROKEN POSE — controlled, ring-scaled (inner ~static, rim flies/lifts/tumbles more)
+        const c = cells[ci];
+        const dir = new THREE.Vector2(c.cx - F.ix, c.cy - F.iy);
+        const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
+        const ring = c.ring;
+        const spread = 0.05 + ring * 0.24;             // controlled: stays readable as a shattered phone
+        const lift   = LIFT_SIGN * (0.04 + ring * 0.18 + rng() * 0.05);
+        const tum    = 0.04 + ring * 0.15;
+        const broken = new THREE.Vector3(dir.x * spread, dir.y * spread, lift);
+        const brot   = new THREE.Euler(rnd(-tum, tum), rnd(-tum, tum), rnd(-tum * 1.1, tum * 1.1));
+        holder.position.copy(broken); holder.rotation.copy(brot);
+
+        shards.push({ holder, home: new THREE.Vector3(0, 0, 0), broken, brot,
+                      delay: ring * 0.45, dur: 0.5 + rng() * 0.12 });
+      }
+
+      // Hide intact model so exactly one copy of geometry draws (no z-fight).
+      modelWrap.traverse((o) => { if (o.isMesh) o.visible = false; });
+      return { group, shards, edgeMat: null, fillMat: null };
     }
 
     function healShards(face, p) {
       if (!face) return;
       for (const s of face.shards) {
         let e = easeOut(clamp01((p - s.delay) / s.dur));
-        if (e > 0.999) e = 1; // snap -> exact home + exact 0 rotation (seamless seal)
+        if (e > 0.999) e = 1;                          // snap -> exact identity -> pixel-seamless reseal
         s.holder.position.lerpVectors(s.broken, s.home, e);
         s.holder.rotation.set(s.brot.x * (1 - e), s.brot.y * (1 - e), s.brot.z * (1 - e));
       }
-      const vis = 1 - easeOut(clamp01((p - 0.72) / 0.28)); // fade fracture edges (+ glass) as it seals
-      face.edgeMat.opacity = 0.7 * vis;
-      if (face.fillMat) face.fillMat.opacity = 0.16 * vis;
     }
 
     /* mobile/fallback: flat crack overlay that fades */
@@ -417,15 +461,8 @@ function init3D() {
     }
 
     if (DESKTOP) {
-      const screenMesh = findScreenMesh(modelWrap);
-      if (screenMesh) {
-        frontFace = buildScreenShards(screenMesh, 7);                  // REAL display fragments
-      } else {
-        console.warn("[screen-shards] screen mesh not found; using image fallback");
-        frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "image");
-      }
-      backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass");
-      healShards(frontFace, 0); healShards(backFace, 0);
+      frontFace = buildWholePhoneShatter(7);           // the whole rendered phone fractures
+      healShards(frontFace, 0);                         // render shattered at scroll top
     } else {
       frontPlane = flatPlane("assets/img/crack.png", depth / 2 + 0.01, false);
       backPlane = flatPlane("assets/img/crack-back.png", -depth / 2 - 0.01, true);
@@ -448,8 +485,8 @@ function init3D() {
           if (bar) bar.style.width = (p * 100).toFixed(1) + "%";
           if (hint) hint.classList.toggle("hide", p > 0.02);
           if (cta) cta.style.pointerEvents = p > 0.9 ? "auto" : "none";
-          const fp = clamp01(p / 0.20), bp = clamp01((p - 0.64) / 0.22);
-          if (DESKTOP) { healShards(frontFace, fp); healShards(backFace, bp); }
+          const fp = clamp01(p / 0.30); // whole-phone reassembly over the first 30% of scroll
+          if (DESKTOP) { healShards(frontFace, fp); }
           else {
             if (frontPlane) frontPlane.material.opacity = 1 - clamp01((p - 0.02) / 0.18);
             if (backPlane) backPlane.material.opacity = 1 - clamp01((p - 0.66) / 0.2);
@@ -457,11 +494,11 @@ function init3D() {
         }
       }
     });
-    tl.to(phone.rotation, { y: 0, duration: 1 }, 0);
-    tl.to(phone.rotation, { y: Math.PI, duration: 1.5, ease: "power2.inOut" }, 1.4);
-    tl.to(phone.rotation, { x: -0.1, duration: 0.75, ease: "sine.inOut" }, 1.4);
-    tl.to(phone.rotation, { x: 0.04, duration: 0.75, ease: "sine.inOut" }, 2.15);
-    tl.to(phone.rotation, { y: Math.PI - 0.18, duration: 0.5 }, 3.9);
+    tl.to(phone.rotation, { y: 0,              duration: 1.0 }, 1.5);                      // settle face-on after reseal
+    tl.to(phone.rotation, { y: Math.PI,        duration: 1.5, ease: "power2.inOut" }, 2.6); // 180 flip -> back
+    tl.to(phone.rotation, { x: -0.1,           duration: 0.75, ease: "sine.inOut" }, 2.6);
+    tl.to(phone.rotation, { x: 0.04,           duration: 0.75, ease: "sine.inOut" }, 3.35);
+    tl.to(phone.rotation, { y: Math.PI - 0.18, duration: 0.5 }, 4.4);
 
     function cap(sel, inAt, outAt) {
       const el = document.querySelector(sel);
@@ -470,18 +507,18 @@ function init3D() {
       if (outAt != null) tl.to(el, { opacity: 0, ease: "power1.in", duration: 0.3 }, outAt);
     }
     gsap.set('[data-cap="0"]', { opacity: 1, y: 0 });
-    cap('[data-cap="0"]', null, 0.6);
-    cap('[data-cap="1"]', 0.85, 1.6);
-    cap('[data-cap="2"]', 2.35, 3.1);
-    cap('[data-cap="3"]', 3.3, 3.8);
-    cap('[data-cap="4"]', 3.95, null);
+    cap('[data-cap="0"]', null, 1.5);   // "Cracked screen?" over the shattered / healing phone
+    cap('[data-cap="1"]', 1.7, 2.5);    // "Healed to factory clarity."
+    cap('[data-cap="2"]', 2.8, 3.6);    // "Inside and out." during the turn
+    cap('[data-cap="3"]', 3.7, 4.4);    // "Restored, edge to edge." on the back reveal
+    cap('[data-cap="4"]', 4.5, null);   // final CTA
 
     if (lenis) {
       lenis.on("scroll", ScrollTrigger.update);
       gsap.ticker.add((t) => lenis.raf(t * 1000));
       gsap.ticker.lagSmoothing(0);
     }
-    window.__heal = (fp, bp) => { if (DESKTOP) { healShards(frontFace, fp || 0); healShards(backFace, bp || 0); } };
+    window.__heal = (fp) => { if (DESKTOP) healShards(frontFace, fp || 0); };
     started = true;
     canvas.classList.add("is-ready");
     ScrollTrigger.refresh();
