@@ -272,9 +272,10 @@ function init3D() {
         const backing = new THREE.Mesh(new THREE.PlaneGeometry(fW * 1.04, fH * 1.02), new THREE.MeshBasicMaterial({ color: 0x05060a }));
         backing.position.z = -0.008; backing.renderOrder = 4; group.add(backing);
       } else {
-        fillMat = new THREE.MeshStandardMaterial({ color: 0xdce8ef, transparent: true, opacity: 0, roughness: 0.12, metalness: 0, envMapIntensity: 1.7, depthWrite: false, side: THREE.DoubleSide });
+        // premium glass: glossy, clear-coated, picks up the room-environment reflections
+        fillMat = new THREE.MeshPhysicalMaterial({ color: 0xc4d6e8, transparent: true, opacity: 0, roughness: 0.03, metalness: 0, envMapIntensity: 2.6, clearcoat: 1, clearcoatRoughness: 0.03, reflectivity: 0.6, depthWrite: false, side: THREE.DoubleSide });
       }
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0xeaf2ff, transparent: true, opacity: 0, depthWrite: false });
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xeaf4ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
       const maxd = Math.hypot(fW, fH) / 2;
       const shards = [];
       for (const poly of polys) {
@@ -300,10 +301,10 @@ function init3D() {
         const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
         const t = Math.min(dist / maxd, 1);
         const home = new THREE.Vector3(cx, cy, 0);
-        const spread = isImage ? (0.02 + t * 0.05) : (0.006 + t * 0.022);
-        const lift = isImage ? (0.006 + rng() * 0.018 + t * 0.014) : (0.015 + rng() * 0.04 + t * 0.03);
+        const spread = isImage ? (0.02 + t * 0.05) : (0.008 + t * 0.03);
+        const lift = isImage ? (0.006 + rng() * 0.018 + t * 0.014) : (0.02 + rng() * 0.05 + t * 0.045);
         const broken = new THREE.Vector3(cx + dir.x * spread, cy + dir.y * spread, lift);
-        const brot = new THREE.Euler(rnd(-0.12, 0.12), rnd(-0.12, 0.12), rnd(-0.14, 0.14));
+        const brot = new THREE.Euler(rnd(-0.16, 0.16), rnd(-0.16, 0.16), rnd(-0.16, 0.16));
         holder.position.copy(broken);
         holder.rotation.copy(brot);
         group.add(holder);
@@ -441,10 +442,15 @@ function init3D() {
       if (!face) return;
       for (const s of face.shards) {
         let e = easeOut(clamp01((p - s.delay) / s.dur));
-        if (e > 0.999) e = 1;                          // snap -> exact identity -> pixel-seamless reseal
+        if (e > 0.999) e = 1;                          // snap -> exact home -> pixel-seamless reseal
         s.holder.position.lerpVectors(s.broken, s.home, e);
         s.holder.rotation.set(s.brot.x * (1 - e), s.brot.y * (1 - e), s.brot.z * (1 - e));
       }
+      // bright crack edges glint while shattered, then fade out as the glass seats;
+      // the glass keeps a faint sheen even when repaired (it's still glass).
+      const seal = easeOut(clamp01((p - 0.5) / 0.5));  // 0 broken -> 1 fully healed
+      if (face.edgeMat) face.edgeMat.opacity = 0.9 * (1 - seal);
+      if (face.fillMat) face.fillMat.opacity = 0.26 - 0.16 * seal;
     }
 
     /* mobile/fallback: flat crack overlay that fades */
@@ -461,8 +467,9 @@ function init3D() {
     }
 
     if (DESKTOP) {
-      frontFace = buildWholePhoneShatter(7);           // the whole rendered phone fractures
-      healShards(frontFace, 0);                         // render shattered at scroll top
+      frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "glass");  // shattered front screen glass
+      backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass");  // shattered back glass
+      healShards(frontFace, 0); healShards(backFace, 0);                 // render shattered at scroll top
     } else {
       frontPlane = flatPlane("assets/img/crack.png", depth / 2 + 0.01, false);
       backPlane = flatPlane("assets/img/crack-back.png", -depth / 2 - 0.01, true);
@@ -485,8 +492,8 @@ function init3D() {
           if (bar) bar.style.width = (p * 100).toFixed(1) + "%";
           if (hint) hint.classList.toggle("hide", p > 0.02);
           if (cta) cta.style.pointerEvents = p > 0.9 ? "auto" : "none";
-          const fp = clamp01(p / 0.30); // whole-phone reassembly over the first 30% of scroll
-          if (DESKTOP) { healShards(frontFace, fp); }
+          const fp = clamp01(p / 0.26), bp = clamp01((p - 0.64) / 0.22); // front repairs first, then back
+          if (DESKTOP) { healShards(frontFace, fp); healShards(backFace, bp); }
           else {
             if (frontPlane) frontPlane.material.opacity = 1 - clamp01((p - 0.02) / 0.18);
             if (backPlane) backPlane.material.opacity = 1 - clamp01((p - 0.66) / 0.2);
@@ -494,11 +501,11 @@ function init3D() {
         }
       }
     });
-    tl.to(phone.rotation, { y: 0,              duration: 1.0 }, 1.5);                      // settle face-on after reseal
-    tl.to(phone.rotation, { y: Math.PI,        duration: 1.5, ease: "power2.inOut" }, 2.6); // 180 flip -> back
-    tl.to(phone.rotation, { x: -0.1,           duration: 0.75, ease: "sine.inOut" }, 2.6);
-    tl.to(phone.rotation, { x: 0.04,           duration: 0.75, ease: "sine.inOut" }, 3.35);
-    tl.to(phone.rotation, { y: Math.PI - 0.18, duration: 0.5 }, 4.4);
+    tl.to(phone.rotation, { y: 0,              duration: 1.0 }, 0);                        // gentle settle face-on during front repair
+    tl.to(phone.rotation, { y: Math.PI,        duration: 1.5, ease: "power2.inOut" }, 1.6); // rotate to reveal the (shattered) back
+    tl.to(phone.rotation, { x: -0.1,           duration: 0.75, ease: "sine.inOut" }, 1.6);
+    tl.to(phone.rotation, { x: 0.04,           duration: 0.75, ease: "sine.inOut" }, 2.35);
+    tl.to(phone.rotation, { y: Math.PI - 0.18, duration: 0.5 }, 4.0);
 
     function cap(sel, inAt, outAt) {
       const el = document.querySelector(sel);
@@ -507,10 +514,10 @@ function init3D() {
       if (outAt != null) tl.to(el, { opacity: 0, ease: "power1.in", duration: 0.3 }, outAt);
     }
     gsap.set('[data-cap="0"]', { opacity: 1, y: 0 });
-    cap('[data-cap="0"]', null, 1.5);   // "Cracked screen?" over the shattered / healing phone
-    cap('[data-cap="1"]', 1.7, 2.5);    // "Healed to factory clarity."
-    cap('[data-cap="2"]', 2.8, 3.6);    // "Inside and out." during the turn
-    cap('[data-cap="3"]', 3.7, 4.4);    // "Restored, edge to edge." on the back reveal
+    cap('[data-cap="0"]', null, 1.0);   // "Cracked screen?" over the shattered front
+    cap('[data-cap="1"]', 1.3, 2.3);    // "Healed to factory clarity." after the front repairs
+    cap('[data-cap="2"]', 3.0, 3.7);    // "Shattered back glass?" as the back is revealed
+    cap('[data-cap="3"]', 3.9, 4.4);    // "Restored, edge to edge." after the back repairs
     cap('[data-cap="4"]', 4.5, null);   // final CTA
 
     if (lenis) {
@@ -518,7 +525,7 @@ function init3D() {
       gsap.ticker.add((t) => lenis.raf(t * 1000));
       gsap.ticker.lagSmoothing(0);
     }
-    window.__heal = (fp) => { if (DESKTOP) healShards(frontFace, fp || 0); };
+    window.__heal = (fp, bp) => { if (DESKTOP) { healShards(frontFace, fp || 0); healShards(backFace, bp || 0); } };
     started = true;
     canvas.classList.add("is-ready");
     ScrollTrigger.refresh();
