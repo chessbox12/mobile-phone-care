@@ -50,6 +50,59 @@ function crackTexture(file, flipX) {
   return tex;
 }
 
+/* ----- glass-shard shatter helpers ----- */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// Sutherland–Hodgman clip of a polygon to an axis-aligned rect
+function clipRect(poly, minx, miny, maxx, maxy) {
+  const lx = (a, b, x) => { const t = (x - a[0]) / (b[0] - a[0]); return [x, a[1] + t * (b[1] - a[1])]; };
+  const ly = (a, b, y) => { const t = (y - a[1]) / (b[1] - a[1]); return [a[0] + t * (b[0] - a[0]), y]; };
+  const clip = (pts, inside, isect) => {
+    const r = [], n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i + n - 1) % n], b = pts[i], ia = inside(a), ib = inside(b);
+      if (ib) { if (!ia) r.push(isect(a, b)); r.push(b); }
+      else if (ia) r.push(isect(a, b));
+    }
+    return r;
+  };
+  let p = poly;
+  p = clip(p, q => q[0] >= minx, (a, b) => lx(a, b, minx)); if (p.length < 3) return p;
+  p = clip(p, q => q[0] <= maxx, (a, b) => lx(a, b, maxx)); if (p.length < 3) return p;
+  p = clip(p, q => q[1] >= miny, (a, b) => ly(a, b, miny)); if (p.length < 3) return p;
+  p = clip(p, q => q[1] <= maxy, (a, b) => ly(a, b, maxy));
+  return p;
+}
+// radial+ring shatter of a centred rect into shard polygons (ordered, not random)
+function genShardPolys(W, H, ix, iy, seed) {
+  const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
+  let maxR = 0;
+  for (const c of [[-W/2,-H/2],[W/2,-H/2],[W/2,H/2],[-W/2,H/2]]) maxR = Math.max(maxR, Math.hypot(c[0] - ix, c[1] - iy));
+  maxR *= 1.05;
+  const N = 11, angs = [];
+  for (let i = 0; i < N; i++) angs.push(i / N * Math.PI * 2 + rnd(-0.12, 0.12));
+  angs.sort((a, b) => a - b); angs.push(angs[0] + Math.PI * 2);
+  const rings = [0, 0.14, 0.32, 0.58, 1.0].map(f => f * maxR);
+  const polar = (a, r) => [ix + Math.cos(a) * r, iy + Math.sin(a) * r];
+  const out = [];
+  for (let k = 0; k < rings.length - 1; k++)
+    for (let i = 0; i < N; i++) {
+      const a0 = angs[i], a1 = angs[i + 1];
+      const poly = k === 0
+        ? [[ix, iy], polar(a0, rings[1]), polar(a1, rings[1])]
+        : [polar(a0, rings[k]), polar(a1, rings[k]), polar(a1, rings[k + 1]), polar(a0, rings[k + 1])];
+      const c = clipRect(poly, -W/2, -H/2, W/2, H/2);
+      if (c.length >= 3) out.push(c);
+    }
+  return out;
+}
+
 /* boot (after consts) */
 if (REDUCED || NOWEBGL || !window.gsap || !window.ScrollTrigger) {
   docEl.classList.add("no-webgl");
@@ -118,28 +171,84 @@ function init3D() {
 
   /* ---- crack overlays + scroll choreography (after model ready) ---- */
   function buildCracksAndScroll() {
-    const faceW = Math.min(dims.w, dims.h, dims.d) === dims.w ? dims.h : dims.w; // safety
     // After base orientation, smallest dim is depth (Z); the two larger are the face.
     const dimsArr = [dims.w, dims.h, dims.d].sort((a, b) => a - b);
     const depth = dimsArr[0], fW = dimsArr[1] * 0.9, fH = dimsArr[2] * 0.94;
+    const DESKTOP = (canvas.clientWidth || window.innerWidth || 1280) >= 820;
 
-    // square plane (the crack photo is 1:1 — keep it undistorted, centred on the face)
-    // bigger than the screen width so the shatter reads large; the edge vignette
-    // keeps the faint overflow off the metal frame.
-    const crackSide = fW * 1.42;
-    function plane(tex, z, faceBack) {
+    let frontFace = null, backFace = null, frontPlane = null, backPlane = null;
+    const easeOut = (x) => 1 - Math.pow(1 - x, 3);
+    const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+    /* desktop: real glass shards that reassemble (gaps between them read as the cracks) */
+    function buildShardFace(faceZ, flipX, seed) {
+      const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
+      const ix = rnd(-0.1, 0.1) * fW, iy = rnd(-0.06, 0.2) * fH;
+      const polys = genShardPolys(fW, fH, ix, iy, seed);
+      const group = new THREE.Group();
+      group.position.z = faceZ;
+      if (flipX) group.rotation.y = Math.PI;
+      group.renderOrder = 6;
+      phone.add(group);
+      const fillMat = new THREE.MeshStandardMaterial({ color: 0xdce8ef, transparent: true, opacity: 0, roughness: 0.12, metalness: 0, envMapIntensity: 1.7, depthWrite: false, side: THREE.DoubleSide });
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0, depthWrite: false });
+      const maxd = Math.hypot(fW, fH) / 2;
+      const shards = [];
+      for (const poly of polys) {
+        const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+        const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+        const shape = new THREE.Shape();
+        poly.forEach((p, i) => i ? shape.lineTo(p[0] - cx, p[1] - cy) : shape.moveTo(p[0] - cx, p[1] - cy));
+        const geo = new THREE.ShapeGeometry(shape);
+        const holder = new THREE.Group();
+        holder.add(new THREE.Mesh(geo, fillMat));
+        holder.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+        const dir = new THREE.Vector2(cx - ix, cy - iy);
+        const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
+        const t = Math.min(dist / maxd, 1);
+        const home = new THREE.Vector3(cx, cy, 0);
+        const broken = new THREE.Vector3(cx + dir.x * (0.006 + t * 0.022), cy + dir.y * (0.006 + t * 0.022), 0.015 + rng() * 0.04 + t * 0.03);
+        const brot = new THREE.Euler(rnd(-0.16, 0.16), rnd(-0.16, 0.16), rnd(-0.1, 0.1));
+        holder.position.copy(broken);
+        holder.rotation.copy(brot);
+        group.add(holder);
+        shards.push({ holder, home, broken, brot, delay: (1 - t) * 0.4, dur: 0.45 + rng() * 0.12 });
+      }
+      return { group, fillMat, edgeMat, shards };
+    }
+    function healShards(face, p) {
+      if (!face) return;
+      for (const s of face.shards) {
+        const e = easeOut(clamp01((p - s.delay) / s.dur));
+        s.holder.position.lerpVectors(s.broken, s.home, e);
+        s.holder.rotation.set(s.brot.x * (1 - e), s.brot.y * (1 - e), s.brot.z * (1 - e));
+      }
+      const vis = 1 - easeOut(clamp01((p - 0.7) / 0.3)); // once seated, fade edges/glass -> smooth
+      face.edgeMat.opacity = 0.6 * vis;
+      face.fillMat.opacity = 0.16 * vis;
+    }
+
+    /* mobile/fallback: flat crack overlay that fades */
+    function flatPlane(file, z, faceBack) {
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(crackSide, crackSide),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 1 })
+        new THREE.PlaneGeometry(fW * 1.42, fW * 1.42),
+        new THREE.MeshBasicMaterial({ map: crackTexture(file, faceBack), transparent: true, depthWrite: false })
       );
       mesh.position.z = z;
       if (faceBack) mesh.rotation.y = Math.PI;
-      mesh.renderOrder = 5;
+      mesh.renderOrder = 6;
       phone.add(mesh);
       return mesh;
     }
-    frontCrack = plane(crackTexture("assets/img/crack.png", false), depth / 2 + 0.01, false);
-    backCrack = plane(crackTexture("assets/img/crack-back.png", true), -depth / 2 - 0.01, true);
+
+    if (DESKTOP) {
+      frontFace = buildShardFace(depth / 2 + 0.006, false, 7);
+      backFace = buildShardFace(-depth / 2 - 0.006, true, 23);
+      healShards(frontFace, 0); healShards(backFace, 0);
+    } else {
+      frontPlane = flatPlane("assets/img/crack.png", depth / 2 + 0.01, false);
+      backPlane = flatPlane("assets/img/crack-back.png", -depth / 2 - 0.01, true);
+    }
 
     phone.rotation.set(0.04, -0.22, 0);
 
@@ -151,21 +260,26 @@ function init3D() {
     const tl = gsap.timeline({
       defaults: { ease: "none" },
       scrollTrigger: {
-        trigger: "#stage", start: "top top", end: "+=520%",
+        trigger: "#stage", start: "top top", end: "+=560%",
         scrub: 1, pin: true, pinSpacing: true, anticipatePin: 1,
         onUpdate(self) {
-          if (bar) bar.style.width = (self.progress * 100).toFixed(1) + "%";
-          if (hint) hint.classList.toggle("hide", self.progress > 0.02);
-          if (cta) cta.style.pointerEvents = self.progress > 0.9 ? "auto" : "none";
+          const p = self.progress;
+          if (bar) bar.style.width = (p * 100).toFixed(1) + "%";
+          if (hint) hint.classList.toggle("hide", p > 0.02);
+          if (cta) cta.style.pointerEvents = p > 0.9 ? "auto" : "none";
+          const fp = clamp01(p / 0.20), bp = clamp01((p - 0.64) / 0.22);
+          if (DESKTOP) { healShards(frontFace, fp); healShards(backFace, bp); }
+          else {
+            if (frontPlane) frontPlane.material.opacity = 1 - clamp01((p - 0.02) / 0.18);
+            if (backPlane) backPlane.material.opacity = 1 - clamp01((p - 0.66) / 0.2);
+          }
         }
       }
     });
     tl.to(phone.rotation, { y: 0, duration: 1 }, 0);
-    tl.to(frontCrack.material, { opacity: 0, duration: 1, ease: "power1.inOut" }, 0);
     tl.to(phone.rotation, { y: Math.PI, duration: 1.5, ease: "power2.inOut" }, 1.4);
     tl.to(phone.rotation, { x: -0.1, duration: 0.75, ease: "sine.inOut" }, 1.4);
     tl.to(phone.rotation, { x: 0.04, duration: 0.75, ease: "sine.inOut" }, 2.15);
-    tl.to(backCrack.material, { opacity: 0, duration: 1, ease: "power1.inOut" }, 2.95);
     tl.to(phone.rotation, { y: Math.PI - 0.18, duration: 0.5 }, 3.9);
 
     function cap(sel, inAt, outAt) {
@@ -186,6 +300,7 @@ function init3D() {
       gsap.ticker.add((t) => lenis.raf(t * 1000));
       gsap.ticker.lagSmoothing(0);
     }
+    window.__heal = (fp, bp) => { if (DESKTOP) { healShards(frontFace, fp || 0); healShards(backFace, bp || 0); } };
     started = true;
     canvas.classList.add("is-ready");
     ScrollTrigger.refresh();
