@@ -112,6 +112,7 @@ canvas { display: block; }
 .nav__links { display: flex; gap: 1.8rem; }
 .nav__links a { font-size: 0.92rem; color: var(--ink-soft); transition: color var(--dur) var(--ease-out); }
 .nav__links a:hover { color: var(--ink); }
+.nav__cta { display: inline-flex; align-items: center; gap: 0.5rem; }
 
 /* -------------------------------------------------------------------------
    STAGE — pinned 3D phone
@@ -273,6 +274,36 @@ html.no-webgl .phone-fallback { display: block; }
 }
 
 /* -------------------------------------------------------------------------
+   Reviews (auto-scrolling marquee)
+   ------------------------------------------------------------------------- */
+.reviews { overflow: hidden; }
+.reviews__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 1.6rem;
+}
+.reviews__head .eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; }
+.reviews__stars { color: var(--gold); letter-spacing: 1px; }
+.reviews__link { font-size: 0.9rem; color: var(--ink-soft); white-space: nowrap; transition: color var(--dur) var(--ease-out); }
+.reviews__link:hover { color: var(--ink); }
+.reviews__viewport {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.reviews__track { display: flex; width: max-content; animation: reviewScroll 64s linear infinite; }
+.reviews__viewport:hover .reviews__track { animation-play-state: paused; }
+.review {
+  flex: 0 0 320px; max-width: 320px; margin-right: 1.1rem;
+  display: flex; flex-direction: column; gap: 0.7rem;
+  background: #fdfcfa; border: 1px solid var(--line-soft); border-radius: 16px;
+  padding: 1.4rem 1.5rem; box-shadow: 0 10px 28px -22px rgba(26, 25, 22, 0.5);
+}
+.review__stars { color: var(--gold); letter-spacing: 2px; font-size: 0.82rem; }
+.review__text { color: var(--ink-soft); line-height: 1.55; font-size: 0.97rem; }
+.review__author { margin-top: auto; font-weight: 600; font-size: 0.9rem; color: var(--ink); }
+@keyframes reviewScroll { to { transform: translateX(-50%); } }
+
+/* -------------------------------------------------------------------------
    Footer
    ------------------------------------------------------------------------- */
 .footer { background: var(--bg-2); border-top: 1px solid var(--line-soft); padding-block: 2.25rem; }
@@ -307,4 +338,8 @@ html:not(.js) .scroll-hint, html.reduced .scroll-hint { display: none; }
     animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important; scroll-behavior: auto !important;
   }
+  .reviews__viewport { overflow-x: auto; }   /* no marquee -> let users scroll reviews */
+}
+@media (max-width: 560px) {
+  .nav__wa span { display: none; }            /* WhatsApp icon-only on small screens */
 }
