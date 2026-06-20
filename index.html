@@ -184,8 +184,13 @@
         <p class="eyebrow center">Repair pricing</p>
         <h2 class="pricing__title">iPhone screen &amp; back glass</h2>
         <p class="pricing__sub">Transparent, upfront pricing — most repairs done while you wait.</p>
-        <div class="price-card">
-          <table class="price-table">
+        <details class="price-drop">
+          <summary class="price-drop__head">
+            <span>View full price list</span>
+            <svg class="price-drop__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </summary>
+          <div class="price-card">
+            <table class="price-table">
             <thead>
               <tr><th scope="col">Model</th><th scope="col">Screen</th><th scope="col">Back&nbsp;glass</th></tr>
             </thead>
@@ -213,7 +218,8 @@
             </tbody>
           </table>
         </div>
-        <p class="pricing__note">Prices in AUD. “—” = coming soon / price on application. Other phones, tablets &amp; laptops — just ask.</p>
+          <p class="pricing__note">Prices in AUD. “—” = coming soon / price on application. Other phones, tablets &amp; laptops — just ask.</p>
+        </details>
       </div>
     </section>
 

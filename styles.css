@@ -218,9 +218,28 @@ html.no-webgl .phone-fallback { display: block; }
 .pricing .eyebrow { color: var(--gold); }
 .pricing__title { text-align: center; margin-top: 0.6rem; font-family: var(--font-display); font-weight: 400; font-size: clamp(1.9rem, 1.3rem + 2.6vw, 3rem); color: var(--bg); letter-spacing: 0.01em; }
 .pricing__sub { text-align: center; margin-top: 0.6rem; color: rgba(255, 255, 255, 0.6); }
+/* click-to-open dropdown */
+.price-drop { max-width: 720px; margin: clamp(2rem, 4vw, 3rem) auto 0; }
+.price-drop__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.4rem; cursor: pointer; list-style: none;
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 600; color: #fff; letter-spacing: 0.02em;
+  transition: background 0.2s var(--ease-out), border-radius 0.2s var(--ease-out);
+}
+.price-drop__head::-webkit-details-marker { display: none; }
+.price-drop__head:hover { background: rgba(255, 255, 255, 0.09); }
+.price-drop__chev { color: var(--gold); transition: transform 0.25s var(--ease-out); }
+.price-drop[open] .price-drop__head { border-radius: 14px 14px 0 0; border-bottom-color: transparent; }
+.price-drop[open] .price-drop__chev { transform: rotate(180deg); }
+.price-drop[open] .price-card,
+.price-drop[open] .pricing__note { animation: priceDrop 0.35s var(--ease-out); }
+@keyframes priceDrop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
 .price-card {
-  max-width: 720px; margin: clamp(2rem, 4vw, 3rem) auto 0;
-  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 18px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12); border-top: 0;
+  border-radius: 0 0 14px 14px; overflow: hidden;
   background: rgba(255, 255, 255, 0.035);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   box-shadow: 0 30px 70px -40px rgba(0, 0, 0, 0.8);
