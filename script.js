@@ -181,17 +181,53 @@ function init3D() {
     const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
     /* desktop: real glass shards that reassemble (gaps between them read as the cracks) */
-    function buildShardFace(faceZ, flipX, seed) {
+    // the phone's own lock-screen wallpaper, drawn to a canvas
+    function makeScreenTexture() {
+      const W = 700, H = 1460;
+      const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+      const ctx = cv.getContext("2d");
+      const g = ctx.createRadialGradient(W * 0.5, H * 0.34, 0, W * 0.5, H * 0.42, H * 0.72);
+      g.addColorStop(0, "#222a33"); g.addColorStop(0.5, "#13161c"); g.addColorStop(1, "#070809");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const glow = ctx.createRadialGradient(W * 0.5, H * 0.2, 0, W * 0.5, H * 0.2, W * 0.8);
+      glow.addColorStop(0, "rgba(96,140,210,0.16)"); glow.addColorStop(1, "rgba(96,140,210,0)");
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#f4f7fc";
+      ctx.font = "300 " + Math.round(H * 0.135) + "px -apple-system,'Helvetica Neue',Arial,sans-serif";
+      ctx.fillText("9:41", W / 2, H * 0.31);
+      ctx.fillStyle = "rgba(214,224,240,0.85)";
+      ctx.font = "500 " + Math.round(H * 0.027) + "px -apple-system,Arial,sans-serif";
+      ctx.fillText("Friday, 20 June", W / 2, H * 0.356);
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      const bw = W * 0.3, bh = 9, bx = W / 2 - bw / 2, by = H * 0.962;
+      if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, bh / 2); ctx.fill(); } else ctx.fillRect(bx, by, bw, bh);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      return tex;
+    }
+
+    // mode "image": the screen picture itself is the shards (opaque, screen-space UVs);
+    // mode "glass": faint reflective glass shards over the intact model surface.
+    function buildShardFace(faceZ, flipX, seed, mode) {
       const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
-      const ix = rnd(-0.1, 0.1) * fW, iy = rnd(-0.06, 0.2) * fH;
+      const ix = rnd(-0.08, 0.08) * fW, iy = rnd(-0.05, 0.18) * fH;
       const polys = genShardPolys(fW, fH, ix, iy, seed);
       const group = new THREE.Group();
       group.position.z = faceZ;
       if (flipX) group.rotation.y = Math.PI;
       group.renderOrder = 6;
       phone.add(group);
-      const fillMat = new THREE.MeshStandardMaterial({ color: 0xdce8ef, transparent: true, opacity: 0, roughness: 0.12, metalness: 0, envMapIntensity: 1.7, depthWrite: false, side: THREE.DoubleSide });
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0xeef5ff, transparent: true, opacity: 0, depthWrite: false });
+      const isImage = mode === "image";
+      let imgMat = null, fillMat = null;
+      if (isImage) {
+        imgMat = new THREE.MeshBasicMaterial({ map: makeScreenTexture() });
+        const backing = new THREE.Mesh(new THREE.PlaneGeometry(fW * 1.04, fH * 1.02), new THREE.MeshBasicMaterial({ color: 0x05060a }));
+        backing.position.z = -0.008; backing.renderOrder = 4; group.add(backing);
+      } else {
+        fillMat = new THREE.MeshStandardMaterial({ color: 0xdce8ef, transparent: true, opacity: 0, roughness: 0.12, metalness: 0, envMapIntensity: 1.7, depthWrite: false, side: THREE.DoubleSide });
+      }
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xeaf2ff, transparent: true, opacity: 0, depthWrite: false });
       const maxd = Math.hypot(fW, fH) / 2;
       const shards = [];
       for (const poly of polys) {
@@ -200,15 +236,27 @@ function init3D() {
         const shape = new THREE.Shape();
         poly.forEach((p, i) => i ? shape.lineTo(p[0] - cx, p[1] - cy) : shape.moveTo(p[0] - cx, p[1] - cy));
         const geo = new THREE.ShapeGeometry(shape);
+        if (isImage) {
+          const pos = geo.attributes.position, uv = [];
+          for (let i = 0; i < pos.count; i++) {
+            let u = (pos.getX(i) + cx + fW / 2) / fW, v = (pos.getY(i) + cy + fH / 2) / fH;
+            if (flipX) u = 1 - u;
+            uv.push(u, v);
+          }
+          geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+        }
         const holder = new THREE.Group();
-        holder.add(new THREE.Mesh(geo, fillMat));
-        holder.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+        const sMesh = new THREE.Mesh(geo, isImage ? imgMat : fillMat); sMesh.renderOrder = 6;
+        const sLine = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat); sLine.renderOrder = 7;
+        holder.add(sMesh, sLine);
         const dir = new THREE.Vector2(cx - ix, cy - iy);
         const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
         const t = Math.min(dist / maxd, 1);
         const home = new THREE.Vector3(cx, cy, 0);
-        const broken = new THREE.Vector3(cx + dir.x * (0.006 + t * 0.022), cy + dir.y * (0.006 + t * 0.022), 0.015 + rng() * 0.04 + t * 0.03);
-        const brot = new THREE.Euler(rnd(-0.16, 0.16), rnd(-0.16, 0.16), rnd(-0.1, 0.1));
+        const spread = isImage ? (0.02 + t * 0.05) : (0.006 + t * 0.022);
+        const lift = isImage ? (0.006 + rng() * 0.018 + t * 0.014) : (0.015 + rng() * 0.04 + t * 0.03);
+        const broken = new THREE.Vector3(cx + dir.x * spread, cy + dir.y * spread, lift);
+        const brot = new THREE.Euler(rnd(-0.12, 0.12), rnd(-0.12, 0.12), rnd(-0.14, 0.14));
         holder.position.copy(broken);
         holder.rotation.copy(brot);
         group.add(holder);
@@ -223,9 +271,9 @@ function init3D() {
         s.holder.position.lerpVectors(s.broken, s.home, e);
         s.holder.rotation.set(s.brot.x * (1 - e), s.brot.y * (1 - e), s.brot.z * (1 - e));
       }
-      const vis = 1 - easeOut(clamp01((p - 0.7) / 0.3)); // once seated, fade edges/glass -> smooth
-      face.edgeMat.opacity = 0.6 * vis;
-      face.fillMat.opacity = 0.16 * vis;
+      const vis = 1 - easeOut(clamp01((p - 0.72) / 0.28)); // fade fracture edges (+ glass) as it seals
+      face.edgeMat.opacity = 0.7 * vis;
+      if (face.fillMat) face.fillMat.opacity = 0.16 * vis;
     }
 
     /* mobile/fallback: flat crack overlay that fades */
@@ -242,8 +290,8 @@ function init3D() {
     }
 
     if (DESKTOP) {
-      frontFace = buildShardFace(depth / 2 + 0.006, false, 7);
-      backFace = buildShardFace(-depth / 2 - 0.006, true, 23);
+      frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "image");
+      backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass");
       healShards(frontFace, 0); healShards(backFace, 0);
     } else {
       frontPlane = flatPlane("assets/img/crack.png", depth / 2 + 0.01, false);
