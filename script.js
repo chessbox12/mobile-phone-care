@@ -37,43 +37,17 @@ document.querySelectorAll('a[href^="#"]').forEach(function (a) {
   });
 });
 
-/* ----- crack overlay art → texture ----- */
-const SCREEN_W = 600, SCREEN_H = 1240, RX = 70;
-function svgTexture(svg, { flipX = false } = {}) {
+/* ----- crack overlay: real shattered-glass photo, fractures extracted to alpha ----- */
+function crackTexture(flipX) {
   const tex = new THREE.Texture();
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  tex.center.set(0.5, 0.5);
   if (flipX) { tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = -1; }
   const img = new Image();
   img.onload = () => { tex.image = img; tex.needsUpdate = true; };
-  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  img.src = "assets/img/crack.png";
   return tex;
-}
-function crackSVG(cx, cy) {
-  const lines = [
-    `${cx},${cy} ${cx + 72},${cy - 180} ${cx + 100},${cy - 344} ${cx + 148},${cy - 508}`,
-    `${cx},${cy} ${cx + 180},${cy - 56} ${cx + 280},${cy - 156} ${cx + 320},${cy - 220}`,
-    `${cx},${cy} ${cx + 148},${cy + 120} ${cx + 240},${cy + 280} ${cx + 320},${cy + 440}`,
-    `${cx},${cy} ${cx - 8},${cy + 240} ${cx - 40},${cy + 440} ${cx - 68},${cy + 624}`,
-    `${cx},${cy} ${cx - 140},${cy + 112} ${cx - 244},${cy + 216} ${cx - 320},${cy + 336}`,
-    `${cx},${cy} ${cx - 108},${cy - 116} ${cx - 212},${cy - 208} ${cx - 300},${cy - 300}`,
-    `${cx},${cy} ${cx - 28},${cy - 176} ${cx - 64},${cy - 344} ${cx - 96},${cy - 520}`
-  ].map(p => `<polyline points="${p}"/>`).join("");
-  const ring = [
-    `${cx + 100},${cy - 344} ${cx + 156},${cy - 212} ${cx + 212},${cy - 36} ${cx + 148},${cy + 120}`,
-    `${cx - 108},${cy - 116} ${cx - 140},${cy + 112} ${cx - 8},${cy + 240} ${cx + 148},${cy + 120}`
-  ].map(p => `<polyline points="${p}" stroke-opacity=".34"/>`).join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SCREEN_W}" height="${SCREEN_H}" viewBox="0 0 ${SCREEN_W} ${SCREEN_H}">
-    <defs>
-      <radialGradient id="i" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".4" stop-color="#dfe3ea" stop-opacity=".22"/><stop offset="1" stop-color="#dfe3ea" stop-opacity="0"/></radialGradient>
-      <clipPath id="c"><rect x="0" y="0" width="${SCREEN_W}" height="${SCREEN_H}" rx="${RX}"/></clipPath>
-    </defs>
-    <g clip-path="url(#c)">
-      <circle cx="${cx}" cy="${cy}" r="230" fill="url(#i)"/>
-      <g fill="#cfd4dd" opacity=".10"><polygon points="${cx},${cy} ${cx + 110},${cy - 156} ${cx + 240},${cy - 56} ${cx + 144},${cy + 60}"/><polygon points="${cx},${cy} ${cx + 144},${cy + 60} ${cx + 92},${cy + 280} ${cx - 40},${cy + 200}"/><polygon points="${cx},${cy} ${cx - 40},${cy + 200} ${cx - 188},${cy + 144} ${cx - 140},${cy - 56}"/></g>
-      <g fill="none" stroke="#f4f6fa" stroke-opacity=".72" stroke-width="2.4" stroke-linejoin="round">${lines}${ring}</g>
-    </g>
-  </svg>`;
 }
 
 /* boot (after consts) */
@@ -149,9 +123,11 @@ function init3D() {
     const dimsArr = [dims.w, dims.h, dims.d].sort((a, b) => a - b);
     const depth = dimsArr[0], fW = dimsArr[1] * 0.9, fH = dimsArr[2] * 0.94;
 
+    // square plane (the crack photo is 1:1 — keep it undistorted, centred on the face)
+    const crackSide = fW;
     function plane(tex, z, faceBack) {
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(fW, fH),
+        new THREE.PlaneGeometry(crackSide, crackSide),
         new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 1 })
       );
       mesh.position.z = z;
@@ -160,8 +136,8 @@ function init3D() {
       phone.add(mesh);
       return mesh;
     }
-    frontCrack = plane(svgTexture(crackSVG(300, 560)), depth / 2 + 0.01, false);
-    backCrack = plane(svgTexture(crackSVG(300, 560), { flipX: true }), -depth / 2 - 0.01, true);
+    frontCrack = plane(crackTexture(false), depth / 2 + 0.01, false);
+    backCrack = plane(crackTexture(true), -depth / 2 - 0.01, true);
 
     phone.rotation.set(0.04, -0.22, 0);
 
