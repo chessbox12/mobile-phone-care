@@ -159,6 +159,12 @@ html.no-webgl .phone-fallback { display: block; }
 .cap__a { color: var(--ink); }
 .cap--final .cap__a { max-width: 16ch; }
 .cap__cta { pointer-events: auto; }
+.cap__warranty {
+  justify-self: center;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #8a6d34; padding: 0.42rem 0.95rem;
+  border: 1px solid rgba(169, 139, 80, 0.45); border-radius: 999px;
+}
 
 .stage__progress {
   position: absolute; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
@@ -278,6 +284,7 @@ html.no-webgl .phone-fallback { display: block; }
 .footer__credit { margin-top: 1rem; font-size: 0.72rem; color: var(--muted); opacity: 0.8; }
 .footer__credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .footer__credit a:hover { color: var(--ink); }
+.footer__fineprint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--muted); opacity: 0.85; }
 
 /* -------------------------------------------------------------------------
    Fallbacks: no-JS / reduced motion show final caption
