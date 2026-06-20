@@ -38,7 +38,7 @@ document.querySelectorAll('a[href^="#"]').forEach(function (a) {
 });
 
 /* ----- crack overlay: real shattered-glass photo, fractures extracted to alpha ----- */
-function crackTexture(flipX) {
+function crackTexture(file, flipX) {
   const tex = new THREE.Texture();
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
@@ -46,7 +46,7 @@ function crackTexture(flipX) {
   if (flipX) { tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = -1; }
   const img = new Image();
   img.onload = () => { tex.image = img; tex.needsUpdate = true; };
-  img.src = "assets/img/crack.png";
+  img.src = file;
   return tex;
 }
 
@@ -124,7 +124,9 @@ function init3D() {
     const depth = dimsArr[0], fW = dimsArr[1] * 0.9, fH = dimsArr[2] * 0.94;
 
     // square plane (the crack photo is 1:1 — keep it undistorted, centred on the face)
-    const crackSide = fW;
+    // bigger than the screen width so the shatter reads large; the edge vignette
+    // keeps the faint overflow off the metal frame.
+    const crackSide = fW * 1.42;
     function plane(tex, z, faceBack) {
       const mesh = new THREE.Mesh(
         new THREE.PlaneGeometry(crackSide, crackSide),
@@ -136,8 +138,8 @@ function init3D() {
       phone.add(mesh);
       return mesh;
     }
-    frontCrack = plane(crackTexture(false), depth / 2 + 0.01, false);
-    backCrack = plane(crackTexture(true), -depth / 2 - 0.01, true);
+    frontCrack = plane(crackTexture("assets/img/crack.png", false), depth / 2 + 0.01, false);
+    backCrack = plane(crackTexture("assets/img/crack-back.png", true), -depth / 2 - 0.01, true);
 
     phone.rotation.set(0.04, -0.22, 0);
 
