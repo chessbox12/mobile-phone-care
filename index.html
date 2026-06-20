@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f1ea">
+  <meta name="theme-color" content="#f4f3ef">
 
   <title>Premium Phone Repair Sydney | Mobile Phone Care</title>
   <meta name="description" content="Sydney's premium phone & device repair specialists. Cracked screens, back glass, batteries, water damage, data recovery and board-level micro-soldering. Warrantied.">
@@ -12,7 +12,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mobile Phone Care">
   <meta property="og:title" content="Premium Phone Repair Sydney | Mobile Phone Care">
-  <meta property="og:description" content="Watch a cracked device heal. Premium phone repair in Sydney — your device deserves expert care.">
+  <meta property="og:description" content="Watch a cracked iPhone heal in 3D. Premium phone repair in Sydney — your device deserves expert care.">
   <meta property="og:url" content="https://www.mobilephonecare.com.au/">
   <meta property="og:image" content="https://www.mobilephonecare.com.au/assets/img/og-image.jpg">
   <meta property="og:locale" content="en_AU">
@@ -22,14 +22,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
 
   <script>
     (function () {
       var d = document.documentElement;
       d.classList.add("js");
       try { if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) d.classList.add("reduced"); } catch (e) {}
+      // WebGL capability flag
+      try {
+        var c = document.createElement("canvas");
+        var gl = c.getContext("webgl2") || c.getContext("webgl");
+        if (!gl) d.classList.add("no-webgl");
+      } catch (e) { d.classList.add("no-webgl"); }
     })();
+  </script>
+
+  <script type="importmap">
+  { "imports": {
+      "three": "./assets/vendor/three.module.js",
+      "three/addons/": "./assets/vendor/addons/"
+  } }
   </script>
 
   <script type="application/ld+json">
@@ -100,7 +113,7 @@
         <a href="#services">Repairs</a>
         <a href="#locations">Locations</a>
       </nav>
-      <a class="btn btn--gold btn--sm nav__call" href="tel:+61408613831">
+      <a class="btn btn--ink btn--sm nav__call" href="tel:+61408613831">
         <svg class="ic ic--sm" aria-hidden="true"><use href="#ic-phone"/></svg><span>Call</span>
       </a>
     </div>
@@ -109,140 +122,23 @@
   <main>
     <span id="top"></span>
 
-    <!-- ===================== STAGE: the repairing phone ===================== -->
+    <!-- ===================== STAGE: the 3D phone ===================== -->
     <section class="stage" id="stage">
       <div class="stage__pin" id="stagePin">
-        <div class="stage__bg" aria-hidden="true"><div class="halo"></div><div class="grain"></div></div>
+        <canvas class="stage__gl" id="gl" aria-hidden="true"></canvas>
+
+        <!-- static fallback when WebGL is unavailable -->
+        <div class="phone-fallback" aria-hidden="true">
+          <svg viewBox="0 0 300 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="iPhone">
+            <rect x="2" y="2" width="296" height="616" rx="48" fill="#2b2823"/>
+            <rect x="3" y="3" width="294" height="614" rx="47" fill="none" stroke="#c9aa68" stroke-width="1.4"/>
+            <rect x="9" y="9" width="282" height="602" rx="44" fill="#0b0b0d"/>
+            <rect x="104" y="21" width="92" height="27" rx="13.5" fill="#000"/>
+            <text x="150" y="210" text-anchor="middle" fill="#f6efe0" font-family="sans-serif" font-size="78" font-weight="300">9:41</text>
+          </svg>
+        </div>
 
         <p class="stage__eyebrow">Watch it heal</p>
-
-        <div class="phone-wrap">
-          <div class="phone__shadow" aria-hidden="true"></div>
-          <div class="phone" id="phone">
-
-            <!-- FRONT -->
-            <div class="phone__face phone__front">
-              <svg viewBox="0 0 300 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="iPhone front, cracked screen healing">
-                <defs>
-                  <linearGradient id="f-rail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1e2bb"/><stop offset=".18" stop-color="#c9aa68"/><stop offset=".5" stop-color="#9a7c44"/><stop offset=".72" stop-color="#dabf82"/><stop offset="1" stop-color="#8a6d3a"/></linearGradient>
-                  <linearGradient id="f-railHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".75"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
-                  <radialGradient id="f-wall" cx=".5" cy=".3" r=".95"><stop offset="0" stop-color="#241d16"/><stop offset=".55" stop-color="#15110d"/><stop offset="1" stop-color="#0a0807"/></radialGradient>
-                  <radialGradient id="f-wallglow" cx=".5" cy=".26" r=".55"><stop offset="0" stop-color="#cda75e" stop-opacity=".32"/><stop offset="1" stop-color="#cda75e" stop-opacity="0"/></radialGradient>
-                  <linearGradient id="f-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset=".22" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-                  <radialGradient id="f-impact" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#efe9dd" stop-opacity=".8"/><stop offset=".45" stop-color="#b9b1a2" stop-opacity=".18"/><stop offset="1" stop-color="#b9b1a2" stop-opacity="0"/></radialGradient>
-                  <clipPath id="f-clip"><rect x="9" y="9" width="282" height="602" rx="44"/></clipPath>
-                </defs>
-
-                <!-- titanium rail + buttons -->
-                <rect x="1" y="1" width="298" height="618" rx="52" fill="url(#f-rail)"/>
-                <rect x="1" y="1" width="298" height="618" rx="52" fill="none" stroke="url(#f-railHi)" stroke-width="1.4"/>
-                <rect x="-1" y="146" width="4" height="22" rx="2" fill="#876b39"/>
-                <rect x="-1" y="182" width="4" height="40" rx="2" fill="#876b39"/>
-                <rect x="-1" y="232" width="4" height="40" rx="2" fill="#876b39"/>
-                <rect x="297" y="196" width="4" height="74" rx="2" fill="#9a7c44"/>
-                <rect x="297" y="300" width="4" height="40" rx="2" fill="#9a7c44"/>
-                <g fill="#77602f" opacity=".6"><rect x="1" y="62" width="4" height="2.4"/><rect x="295" y="62" width="4" height="2.4"/><rect x="1" y="556" width="4" height="2.4"/><rect x="295" y="556" width="4" height="2.4"/></g>
-
-                <!-- black front glass + thin bezel -->
-                <rect x="5" y="5" width="290" height="610" rx="48" fill="#060606"/>
-                <rect x="9" y="9" width="282" height="602" rx="44" fill="#000"/>
-
-                <g clip-path="url(#f-clip)">
-                  <!-- repaired lock screen underneath -->
-                  <rect x="9" y="9" width="282" height="602" fill="url(#f-wall)"/>
-                  <rect x="9" y="9" width="282" height="602" fill="url(#f-wallglow)"/>
-                  <g transform="translate(150 74)">
-                    <rect x="-6" y="-1" width="12" height="10" rx="2" fill="#e9dcc0" fill-opacity=".7"/>
-                    <path d="M-3.5 -1 v-2.5 a3.5 3.5 0 0 1 7 0 v2.5" fill="none" stroke="#e9dcc0" stroke-opacity=".7" stroke-width="1.7"/>
-                  </g>
-                  <text x="150" y="138" text-anchor="middle" fill="#d9c79e" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="13.5" font-weight="500" letter-spacing=".4">Friday, 20 June</text>
-                  <text x="150" y="216" text-anchor="middle" fill="#f6efe0" font-family="-apple-system,Segoe UI,Roboto,sans-serif" font-size="80" font-weight="300" letter-spacing="-2">9:41</text>
-                  <g transform="translate(46 558)"><circle r="22" fill="#fff" fill-opacity=".10"/><path d="M-4 -6 h8 l-1.5 4 v3 l-1.5 8 h-2 l-1.5 -8 v-3 z" fill="none" stroke="#f1e9d8" stroke-width="1.5" stroke-linejoin="round"/></g>
-                  <g transform="translate(254 558)"><circle r="22" fill="#fff" fill-opacity=".10"/><rect x="-8" y="-5.5" width="16" height="12" rx="2.5" fill="none" stroke="#f1e9d8" stroke-width="1.5"/><circle r="3.4" fill="none" stroke="#f1e9d8" stroke-width="1.5"/></g>
-                  <rect x="115" y="596" width="70" height="5" rx="2.5" fill="#fff" fill-opacity=".55"/>
-
-                  <!-- crack overlay -->
-                  <g class="front-crack">
-                    <rect x="9" y="9" width="282" height="602" fill="#0a0805" opacity=".8"/>
-                    <circle cx="150" cy="300" r="120" fill="url(#f-impact)"/>
-                    <g fill="#ada595" opacity=".12"><polygon points="150,300 205,222 270,272 222,330"/><polygon points="150,300 222,330 196,440 130,400"/><polygon points="150,300 130,400 56,372 80,272"/><polygon points="150,300 80,272 96,186 180,186"/></g>
-                    <g fill="none" stroke="#e7e1d4" stroke-opacity=".6" stroke-width="1.1" stroke-linejoin="round">
-                      <polyline points="150,300 186,210 200,128 224,46"/><polyline points="150,300 240,272 290,222 300,190"/><polyline points="150,300 224,360 270,440 300,520"/><polyline points="150,300 146,420 130,520 116,612"/><polyline points="150,300 80,356 28,408 0,488"/><polyline points="150,300 96,242 44,196 6,150"/><polyline points="150,300 136,212 118,128 102,40"/>
-                      <polyline points="200,128 228,194 256,278 224,360" stroke-opacity=".32"/><polyline points="96,242 80,356 146,420 224,360" stroke-opacity=".32"/>
-                    </g>
-                  </g>
-
-                  <rect x="9" y="9" width="282" height="602" fill="url(#f-sheen)"/>
-                </g>
-
-                <!-- Dynamic Island -->
-                <rect x="104" y="21" width="92" height="27" rx="13.5" fill="#000"/>
-                <circle cx="180" cy="34.5" r="4.6" fill="#0b0b0d"/><circle cx="181.4" cy="33.2" r="1.5" fill="#26405f" opacity=".85"/>
-              </svg>
-            </div>
-
-            <!-- BACK -->
-            <div class="phone__face phone__back">
-              <svg viewBox="0 0 300 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="iPhone back, cracked glass healing">
-                <defs>
-                  <linearGradient id="b-rail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1e2bb"/><stop offset=".18" stop-color="#c9aa68"/><stop offset=".5" stop-color="#9a7c44"/><stop offset=".72" stop-color="#dabf82"/><stop offset="1" stop-color="#8a6d3a"/></linearGradient>
-                  <linearGradient id="b-railHi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
-                  <linearGradient id="b-glass" x1="0" y1="0" x2=".75" y2="1"><stop offset="0" stop-color="#2c2823"/><stop offset=".5" stop-color="#1d1a16"/><stop offset="1" stop-color="#14110d"/></linearGradient>
-                  <radialGradient id="b-frost" cx=".32" cy=".24" r=".95"><stop offset="0" stop-color="#fff" stop-opacity=".07"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/></radialGradient>
-                  <linearGradient id="b-sheen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".08"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#cda75e" stop-opacity=".06"/></linearGradient>
-                  <linearGradient id="b-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#efe0b6"/><stop offset=".5" stop-color="#a98b50"/><stop offset="1" stop-color="#7d6230"/></linearGradient>
-                  <radialGradient id="b-lens" cx=".4" cy=".32" r=".78"><stop offset="0" stop-color="#2b2f3a"/><stop offset=".5" stop-color="#0d0e12"/><stop offset="1" stop-color="#040405"/></radialGradient>
-                  <radialGradient id="b-impact" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#efe9dd" stop-opacity=".7"/><stop offset=".45" stop-color="#b9b1a2" stop-opacity=".16"/><stop offset="1" stop-color="#b9b1a2" stop-opacity="0"/></radialGradient>
-                  <clipPath id="b-clip"><rect x="5" y="5" width="290" height="610" rx="48"/></clipPath>
-                </defs>
-
-                <!-- titanium rail + buttons (mirrored) -->
-                <rect x="1" y="1" width="298" height="618" rx="52" fill="url(#b-rail)"/>
-                <rect x="1" y="1" width="298" height="618" rx="52" fill="none" stroke="url(#b-railHi)" stroke-width="1.4"/>
-                <rect x="297" y="146" width="4" height="22" rx="2" fill="#876b39"/>
-                <rect x="297" y="182" width="4" height="40" rx="2" fill="#876b39"/>
-                <rect x="297" y="232" width="4" height="40" rx="2" fill="#876b39"/>
-                <rect x="-1" y="196" width="4" height="74" rx="2" fill="#9a7c44"/>
-                <rect x="-1" y="300" width="4" height="40" rx="2" fill="#9a7c44"/>
-                <g fill="#77602f" opacity=".6"><rect x="1" y="62" width="4" height="2.4"/><rect x="295" y="62" width="4" height="2.4"/><rect x="1" y="556" width="4" height="2.4"/><rect x="295" y="556" width="4" height="2.4"/></g>
-
-                <!-- matte back glass -->
-                <rect x="5" y="5" width="290" height="610" rx="48" fill="url(#b-glass)"/>
-
-                <g clip-path="url(#b-clip)">
-                  <rect x="5" y="5" width="290" height="610" fill="url(#b-frost)"/>
-                  <rect x="5" y="5" width="290" height="610" fill="url(#b-sheen)"/>
-                  <!-- centre emblem (subtle, debossed) -->
-                  <g transform="translate(150 332)" opacity=".26">
-                    <rect x="-20" y="-34" width="40" height="68" rx="12" fill="none" stroke="#d8c393" stroke-width="2"/>
-                    <path d="M-14 7 h5 l3.5 -10 l5.5 17 l3.5 -7 h5.5" fill="none" stroke="#d8c393" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </g>
-
-                  <!-- back crack overlay -->
-                  <g class="back-crack">
-                    <circle cx="156" cy="360" r="120" fill="url(#b-impact)"/>
-                    <g fill="#ada595" opacity=".1"><polygon points="156,360 210,286 268,330 224,392"/><polygon points="156,360 224,392 198,496 134,456"/><polygon points="156,360 134,456 66,428 90,330"/></g>
-                    <g fill="none" stroke="#e7e1d4" stroke-opacity=".5" stroke-width="1.1" stroke-linejoin="round">
-                      <polyline points="156,360 192,270 206,190 230,110"/><polyline points="156,360 246,332 292,286 300,250"/><polyline points="156,360 230,420 276,500 300,560"/><polyline points="156,360 150,470 134,560 122,610"/><polyline points="156,360 86,414 34,470 8,548"/><polyline points="156,360 102,300 58,250 26,206"/>
-                      <polyline points="206,190 234,256 262,338 230,420" stroke-opacity=".28"/></g>
-                  </g>
-                </g>
-
-                <!-- raised camera plateau (iPhone Pro: triple lens triangle + LiDAR + flash) -->
-                <g>
-                  <rect x="18" y="18" width="114" height="114" rx="34" fill="#191712" stroke="url(#b-ring)" stroke-width="1.1" stroke-opacity=".5"/>
-                  <rect x="18" y="18" width="114" height="114" rx="34" fill="url(#b-frost)"/>
-                  <circle cx="52" cy="52" r="19" fill="url(#b-ring)"/><circle cx="52" cy="52" r="15.5" fill="#0c0d10"/><circle cx="52" cy="52" r="11" fill="url(#b-lens)"/><circle cx="52" cy="52" r="4.6" fill="#05060a"/><circle cx="47" cy="47" r="2.6" fill="#9fb6d8" opacity=".5"/>
-                  <circle cx="52" cy="100" r="19" fill="url(#b-ring)"/><circle cx="52" cy="100" r="15.5" fill="#0c0d10"/><circle cx="52" cy="100" r="11" fill="url(#b-lens)"/><circle cx="52" cy="100" r="4.6" fill="#05060a"/><circle cx="47" cy="95" r="2.6" fill="#9fb6d8" opacity=".5"/>
-                  <circle cx="100" cy="76" r="19" fill="url(#b-ring)"/><circle cx="100" cy="76" r="15.5" fill="#0c0d10"/><circle cx="100" cy="76" r="11" fill="url(#b-lens)"/><circle cx="100" cy="76" r="4.6" fill="#05060a"/><circle cx="95" cy="71" r="2.6" fill="#9fb6d8" opacity=".5"/>
-                  <circle cx="105" cy="37" r="6" fill="#1a1813"/><circle cx="105" cy="37" r="3.4" fill="#f3ead2" opacity=".85"/>
-                  <circle cx="104" cy="114" r="5" fill="#0c0d10" stroke="url(#b-ring)" stroke-width="1"/>
-                  <circle cx="30" cy="114" r="1.6" fill="#0a0a0c"/>
-                </g>
-              </svg>
-            </div>
-          </div>
-        </div>
 
         <!-- short captions, crossfaded by scroll -->
         <div class="caps">
@@ -252,7 +148,7 @@
           <div class="cap" data-cap="3"><span class="cap__a">Restored, edge to edge.</span></div>
           <div class="cap cap--final" data-cap="4">
             <span class="cap__a">Your device deserves expert care.</span>
-            <a class="btn btn--gold btn--lg cap__cta" href="tel:+61408613831">Book a repair</a>
+            <a class="btn btn--ink btn--lg cap__cta" href="tel:+61408613831">Book a repair</a>
           </div>
         </div>
 
@@ -266,12 +162,12 @@
       <div class="container">
         <p class="eyebrow center">What we repair</p>
         <ul class="chips">
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-screen"/></svg>Screens</li>
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-backglass"/></svg>Back glass</li>
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-battery"/></svg>Batteries</li>
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-water"/></svg>Water damage</li>
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-data"/></svg>Data recovery</li>
-          <li class="chip glass"><svg class="ic" aria-hidden="true"><use href="#ic-chip"/></svg>Board-level</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-screen"/></svg>Screens</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-backglass"/></svg>Back glass</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-battery"/></svg>Batteries</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-water"/></svg>Water damage</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-data"/></svg>Data recovery</li>
+          <li class="chip"><svg class="ic" aria-hidden="true"><use href="#ic-chip"/></svg>Board-level</li>
         </ul>
       </div>
     </section>
@@ -292,21 +188,21 @@
       <div class="container">
         <p class="eyebrow center">Two Sydney locations</p>
         <div class="loc-grid">
-          <article class="loc glass">
+          <article class="loc">
             <h3 class="loc__name"><svg class="ic" aria-hidden="true"><use href="#ic-pin"/></svg>Martin Place · CBD</h3>
             <p class="loc__addr">Shop 5A, 52 Martin Place, Sydney</p>
             <p class="loc__hours">Mon–Thu 8–4:30 · Fri 8–3 · Sat–Sun closed</p>
             <div class="loc__actions">
-              <a class="btn btn--gold btn--sm" href="tel:+61408613831"><svg class="ic ic--sm" aria-hidden="true"><use href="#ic-phone"/></svg>Call</a>
+              <a class="btn btn--ink btn--sm" href="tel:+61408613831"><svg class="ic ic--sm" aria-hidden="true"><use href="#ic-phone"/></svg>Call</a>
               <a class="btn btn--line btn--sm" href="https://www.google.com/maps/dir/?api=1&destination=Shop+5A+52+Martin+Place+Sydney+NSW+2000" target="_blank" rel="noopener">Directions</a>
             </div>
           </article>
-          <article class="loc glass">
+          <article class="loc">
             <h3 class="loc__name"><svg class="ic" aria-hidden="true"><use href="#ic-pin"/></svg>DFO Homebush</h3>
             <p class="loc__addr">DFO Kiosk 10, 3–5 Underwood Rd, Homebush</p>
             <p class="loc__hours">Daily 10–6 · Thu until 8</p>
             <div class="loc__actions">
-              <a class="btn btn--gold btn--sm" href="tel:+61408613831"><svg class="ic ic--sm" aria-hidden="true"><use href="#ic-phone"/></svg>Call</a>
+              <a class="btn btn--ink btn--sm" href="tel:+61408613831"><svg class="ic ic--sm" aria-hidden="true"><use href="#ic-phone"/></svg>Call</a>
               <a class="btn btn--line btn--sm" href="https://www.google.com/maps/dir/?api=1&destination=DFO+Homebush+3-5+Underwood+Road+Homebush+NSW+2140" target="_blank" rel="noopener">Directions</a>
             </div>
           </article>
@@ -327,11 +223,14 @@
       </div>
       <span class="footer__copy">© 2026 Mobile Phone Care · Sydney</span>
     </div>
+    <div class="container footer__credit">
+      iPhone 15 Pro model by <a href="https://sketchfab.com/Polyman_3D" target="_blank" rel="noopener noreferrer">Polyman</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>.
+    </div>
   </footer>
 
   <script src="assets/vendor/gsap.min.js"></script>
   <script src="assets/vendor/ScrollTrigger.min.js"></script>
   <script src="assets/vendor/lenis.min.js"></script>
-  <script src="script.js" defer></script>
+  <script type="module" src="script.js?v=3"></script>
 </body>
 </html>
