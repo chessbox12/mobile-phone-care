@@ -80,15 +80,15 @@ function clipRect(poly, minx, miny, maxx, maxy) {
   return p;
 }
 // radial+ring shatter of a centred rect into shard polygons (ordered, not random)
-function genShardPolys(W, H, ix, iy, seed) {
+function genShardPolys(W, H, ix, iy, seed, N = 8, ringFracs = [0, 0.20, 0.46, 1.0]) {
   const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
   let maxR = 0;
   for (const c of [[-W/2,-H/2],[W/2,-H/2],[W/2,H/2],[-W/2,H/2]]) maxR = Math.max(maxR, Math.hypot(c[0] - ix, c[1] - iy));
   maxR *= 1.05;
-  const N = 8, angs = [];
+  const angs = [];
   for (let i = 0; i < N; i++) angs.push(i / N * Math.PI * 2 + rnd(-0.12, 0.12));
   angs.sort((a, b) => a - b); angs.push(angs[0] + Math.PI * 2);
-  const rings = [0, 0.20, 0.46, 1.0].map(f => f * maxR);
+  const rings = ringFracs.map(f => f * maxR);
   const polar = (a, r) => [ix + Math.cos(a) * r, iy + Math.sin(a) * r];
   const out = [];
   for (let k = 0; k < rings.length - 1; k++)
@@ -256,10 +256,11 @@ function init3D() {
 
     // mode "image": the screen picture itself is the shards (opaque, screen-space UVs);
     // mode "glass": faint reflective glass shards over the intact model surface.
-    function buildShardFace(faceZ, flipX, seed, mode) {
+    function buildShardFace(faceZ, flipX, seed, mode, pat) {
       const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
-      const ix = rnd(-0.08, 0.08) * fW, iy = rnd(-0.05, 0.18) * fH;
-      const polys = genShardPolys(fW, fH, ix, iy, seed);
+      const P = pat || {};
+      const ix = rnd(P.ixMin ?? -0.08, P.ixMax ?? 0.08) * fW, iy = rnd(P.iyMin ?? -0.05, P.iyMax ?? 0.18) * fH;
+      const polys = genShardPolys(fW, fH, ix, iy, seed, P.N, P.rings);
       const group = new THREE.Group();
       group.position.z = faceZ;
       if (flipX) group.rotation.y = Math.PI;
@@ -301,10 +302,10 @@ function init3D() {
         const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
         const t = Math.min(dist / maxd, 1);
         const home = new THREE.Vector3(cx, cy, 0);
-        const spread = isImage ? (0.02 + t * 0.05) : (0.008 + t * 0.03);
-        const lift = isImage ? (0.006 + rng() * 0.018 + t * 0.014) : (0.02 + rng() * 0.05 + t * 0.045);
+        const spread = isImage ? (0.02 + t * 0.05) : (0.005 + t * 0.022);
+        const lift = isImage ? (0.006 + rng() * 0.018 + t * 0.014) : (0.012 + rng() * 0.03 + t * 0.03);
         const broken = new THREE.Vector3(cx + dir.x * spread, cy + dir.y * spread, lift);
-        const brot = new THREE.Euler(rnd(-0.16, 0.16), rnd(-0.16, 0.16), rnd(-0.16, 0.16));
+        const brot = new THREE.Euler(rnd(-0.11, 0.11), rnd(-0.11, 0.11), rnd(-0.11, 0.11));
         holder.position.copy(broken);
         holder.rotation.copy(brot);
         group.add(holder);
@@ -449,8 +450,8 @@ function init3D() {
       // bright crack edges glint while shattered, then fade out as the glass seats;
       // the glass keeps a faint sheen even when repaired (it's still glass).
       const seal = easeOut(clamp01((p - 0.5) / 0.5));  // 0 broken -> 1 fully healed
-      if (face.edgeMat) face.edgeMat.opacity = 0.9 * (1 - seal);
-      if (face.fillMat) face.fillMat.opacity = 0.26 - 0.16 * seal;
+      if (face.edgeMat) face.edgeMat.opacity = 0.65 * (1 - seal);
+      if (face.fillMat) face.fillMat.opacity = 0.19 - 0.12 * seal;
     }
 
     /* mobile/fallback: flat crack overlay that fades */
@@ -467,8 +468,12 @@ function init3D() {
     }
 
     if (DESKTOP) {
-      frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "glass");  // shattered front screen glass
-      backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass");  // shattered back glass
+      // front: fine, delicate impact web (premium screen crack), centred
+      frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "glass",
+        { N: 10, rings: [0, 0.12, 0.28, 0.5, 1.0] });
+      // back: fewer, larger angular fragments from an off-centre hit (distinct look)
+      backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass",
+        { N: 6, rings: [0, 0.32, 0.64, 1.0], ixMin: 0.05, ixMax: 0.24, iyMin: 0.08, iyMax: 0.30 });
       healShards(frontFace, 0); healShards(backFace, 0);                 // render shattered at scroll top
     } else {
       frontPlane = flatPlane("assets/img/crack.png", depth / 2 + 0.01, false);
