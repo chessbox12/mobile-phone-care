@@ -32,6 +32,9 @@ document.querySelectorAll('a[href^="#"]').forEach(function (a) {
     const t = document.querySelector(id);
     if (!t) return;
     e.preventDefault();
+    // jumping to Prices also expands the price-list dropdown
+    const drop = t.matches && t.matches(".price-drop") ? t : (t.querySelector ? t.querySelector(".price-drop") : null);
+    if (drop) drop.open = true;
     if (lenis) lenis.scrollTo(t, { offset: -64 });
     else { const y = t.getBoundingClientRect().top + window.scrollY - 64; window.scrollTo({ top: y, behavior: REDUCED ? "auto" : "smooth" }); }
   });
@@ -542,6 +545,11 @@ function init3D() {
     const h = canvas.clientHeight || window.innerHeight || 800;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    // portrait / small screens: pull the camera back + lift the phone so the
+    // tall final caption sits clearly below it (no overlap on phones).
+    const portrait = w < 760 || h > w * 1.1;
+    camera.position.z = portrait ? 15.5 : 13;
+    params.phoneY = portrait ? 0.92 : 0.4;
     camera.updateProjectionMatrix();
   }
   new ResizeObserver(resize).observe(canvas);
