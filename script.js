@@ -103,6 +103,30 @@ function genShardPolys(W, H, ix, iy, seed) {
   return out;
 }
 
+// the GLB's real display mesh: hardcoded name first (asset is fixed), then a
+// structural fallback (flat bbox + emissiveMap + ~white emissive), else null.
+const SCREEN_MESH_NAME = "xXDHkMplTIDAXLN";
+function findScreenMesh(root) {
+  let byName = null;
+  root.traverse((o) => { if (!byName && o.isMesh && o.name === SCREEN_MESH_NAME) byName = o; });
+  if (byName) return byName;
+  let best = null, bestArea = 0;
+  const size = new THREE.Vector3();
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if (!m || !m.emissiveMap || !m.emissive) return;
+    if (m.emissive.r + m.emissive.g + m.emissive.b < 2.4) return; // ~white
+    o.geometry.computeBoundingBox();
+    o.geometry.boundingBox.getSize(size);
+    const dims = [size.x, size.y, size.z].sort((a, b) => a - b);
+    if (dims[0] > 1e-3 && dims[0] / (dims[2] || 1) > 0.02) return; // must be ~flat
+    const area = dims[1] * dims[2];
+    if (area > bestArea) { bestArea = area; best = o; }
+  });
+  return best;
+}
+
 /* boot (after consts) */
 if (REDUCED || NOWEBGL || !window.gsap || !window.ScrollTrigger) {
   docEl.classList.add("no-webgl");
@@ -264,10 +288,113 @@ function init3D() {
       }
       return { group, fillMat, edgeMat, shards };
     }
+
+    // Fragment the GLB's OWN screen mesh ("xXDHkMplTIDAXLN") — real geometry,
+    // real material (emissiveMap wallpaper). Confirmed: centered flat plane at
+    // local z = -0.616, W = 7.128 (X), H = 15.403 (Y); UV u = 0.5 - x/W, v = 0.5 + y/H.
+    function buildScreenShards(screenMesh, seed) {
+      const SCR_W = 7.128, SCR_H = 15.403, SCR_Z = -0.616;
+
+      screenMesh.updateWorldMatrix(true, false);
+      const q = screenMesh.quaternion;
+      const qIdentity = Math.abs(q.x) < 1e-4 && Math.abs(q.y) < 1e-4 &&
+                        Math.abs(q.z) < 1e-4 && Math.abs(1 - Math.abs(q.w)) < 1e-4;
+      if (!qIdentity) console.warn("[screen-shards] screen node quaternion != identity; copied verbatim", q);
+
+      // Resolve the outward lift direction at runtime (base.ry=PI flips facing),
+      // so pieces always lift TOWARD the camera.
+      const camPos = camera.getWorldPosition(new THREE.Vector3());
+      const meshWorldPos = screenMesh.getWorldPosition(new THREE.Vector3());
+      const worldQuat = screenMesh.getWorldQuaternion(new THREE.Quaternion());
+      const localPlusZ = new THREE.Vector3(0, 0, 1).applyQuaternion(worldQuat).normalize();
+      const toCam = camPos.clone().sub(meshWorldPos).normalize();
+      const LIFT_SIGN = localPlusZ.dot(toCam) >= 0 ? 1 : -1;
+
+      // Sibling of the screen mesh: same parent + same local TRS, so geometry-local
+      // coords map 1:1 and the shards inherit modelWrap (base.ry=PI, 0.01 scale) +
+      // the phone scroll rotation for free.
+      const group = new THREE.Group();
+      group.name = "screenShards";
+      group.position.copy(screenMesh.position);
+      group.quaternion.copy(screenMesh.quaternion);
+      group.scale.copy(screenMesh.scale);
+      group.renderOrder = 6;
+      (screenMesh.parent || modelWrap).add(group);
+
+      // Clone the real material (shares the same textures -> byte-identical display) and
+      // set DoubleSide: ShapeGeometry faces +Z but the GLB screen front faces the other
+      // way under a FrontSide material, so un-cloned shards would back-face cull (render
+      // black). DoubleSide also lets tilted shards glow from both sides while shattered.
+      const srcMat = Array.isArray(screenMesh.material) ? screenMesh.material[0] : screenMesh.material;
+      if (srcMat.transparent) console.warn("[screen-shards] screen material is transparent; seams may show");
+      const mat = srcMat.clone();
+      mat.side = THREE.DoubleSide;
+
+      const edgeMat = new THREE.LineBasicMaterial({
+        color: 0xcfe0ff, transparent: true, opacity: 0,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      });
+
+      const rng = mulberry32(seed), rnd = (a, b) => a + rng() * (b - a);
+      const ix = rnd(-0.06, 0.06) * SCR_W, iy = rnd(-0.04, 0.18) * SCR_H;
+      const polys = genShardPolys(SCR_W, SCR_H, ix, iy, seed);
+      const maxd = Math.hypot(SCR_W, SCR_H) / 2;
+
+      const shards = [];
+      for (const poly of polys) {
+        const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+        const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+
+        const shape = new THREE.Shape();
+        poly.forEach((p, i) => i
+          ? shape.lineTo(p[0] - cx, p[1] - cy)
+          : shape.moveTo(p[0] - cx, p[1] - cy));
+        const geo = new THREE.ShapeGeometry(shape);
+
+        // confirmed UV map in ABSOLUTE screen-local coords -> provably seamless.
+        const pos = geo.attributes.position, uv = new Float32Array(pos.count * 2);
+        for (let i = 0; i < pos.count; i++) {
+          const X = pos.getX(i) + cx, Y = pos.getY(i) + cy;
+          uv[i * 2]     = 0.5 - X / SCR_W;
+          uv[i * 2 + 1] = 0.5 + Y / SCR_H;
+        }
+        geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+        geo.setAttribute("uv2", new THREE.Float32BufferAttribute(uv.slice(), 2)); // aoMap uses uv2
+
+        const holder = new THREE.Group();
+        const sMesh = new THREE.Mesh(geo, mat);
+        sMesh.renderOrder = 6;
+        sMesh.frustumCulled = false;
+        const sLine = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+        sLine.renderOrder = 7;
+        holder.add(sMesh, sLine);
+
+        const dir = new THREE.Vector2(cx - ix, cy - iy);
+        const dist = dir.length() || 1e-3; dir.multiplyScalar(1 / dist);
+        const t = Math.min(dist / maxd, 1);
+
+        const home = new THREE.Vector3(cx, cy, SCR_Z);
+        const spread = 0.12 + t * 0.55;
+        const lift = LIFT_SIGN * (0.18 + rng() * 0.45 + t * 0.35);
+        const broken = new THREE.Vector3(cx + dir.x * spread, cy + dir.y * spread, SCR_Z + lift);
+        const brot = new THREE.Euler(rnd(-0.14, 0.14), rnd(-0.14, 0.14), rnd(-0.16, 0.16));
+
+        holder.position.copy(broken);
+        holder.rotation.copy(brot);
+        group.add(holder);
+
+        shards.push({ holder, home, broken, brot, delay: (1 - t) * 0.4, dur: 0.45 + rng() * 0.12 });
+      }
+
+      screenMesh.visible = false; // shard union replaces it 1:1 (no double-draw)
+      return { group, fillMat: null, edgeMat, shards };
+    }
+
     function healShards(face, p) {
       if (!face) return;
       for (const s of face.shards) {
-        const e = easeOut(clamp01((p - s.delay) / s.dur));
+        let e = easeOut(clamp01((p - s.delay) / s.dur));
+        if (e > 0.999) e = 1; // snap -> exact home + exact 0 rotation (seamless seal)
         s.holder.position.lerpVectors(s.broken, s.home, e);
         s.holder.rotation.set(s.brot.x * (1 - e), s.brot.y * (1 - e), s.brot.z * (1 - e));
       }
@@ -290,7 +417,13 @@ function init3D() {
     }
 
     if (DESKTOP) {
-      frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "image");
+      const screenMesh = findScreenMesh(modelWrap);
+      if (screenMesh) {
+        frontFace = buildScreenShards(screenMesh, 7);                  // REAL display fragments
+      } else {
+        console.warn("[screen-shards] screen mesh not found; using image fallback");
+        frontFace = buildShardFace(depth / 2 + 0.006, false, 7, "image");
+      }
       backFace = buildShardFace(-depth / 2 - 0.006, true, 23, "glass");
       healShards(frontFace, 0); healShards(backFace, 0);
     } else {
